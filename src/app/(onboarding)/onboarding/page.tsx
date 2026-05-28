@@ -16,6 +16,7 @@ export default async function OnboardingPage() {
     <OnboardingWizard
       initialStep={initialStep}
       initialOrgId={state.organization?.id}
+      initialOrgSlug={state.organization?.slug}
       initialProjectName={state.project?.name}
     />
   );

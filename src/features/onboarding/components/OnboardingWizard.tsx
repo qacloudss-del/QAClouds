@@ -20,22 +20,26 @@ const STEPS = [
 interface Props {
   initialStep: number;
   initialOrgId?: string;
+  initialOrgSlug?: string;
   initialProjectName?: string;
 }
 
 export function OnboardingWizard({
   initialStep,
   initialOrgId,
+  initialOrgSlug,
   initialProjectName,
 }: Props) {
   const router = useRouter();
   const [step, setStep] = useState(initialStep);
   const [orgId, setOrgId] = useState(initialOrgId ?? "");
+  const [orgSlug, setOrgSlug] = useState(initialOrgSlug ?? "");
   const [projectName, setProjectName] = useState(initialProjectName ?? "");
 
-  function handleOrgCreated(id: string) {
+  function handleOrgCreated(id: string, slug: string) {
     setOrgId(id);
-    setStep(2);
+    setOrgSlug(slug);
+    setStep(1);
   }
 
   function handleProjectCreated(_id: string, name: string) {
@@ -48,7 +52,7 @@ export function OnboardingWizard({
   }
 
   function handleComplete() {
-    router.push(`/dashboard`);
+    router.push(orgSlug ? `/${orgSlug}` : "/dashboard");
   }
 
   const completedPercent = Math.round((step / STEPS.length) * 100);
@@ -98,7 +102,7 @@ export function OnboardingWizard({
       {/* Step card */}
       <div className="rounded-xl border bg-card p-6 shadow-sm">
         {step === 0 && (
-          <StepCreateOrg onComplete={(id) => handleOrgCreated(id)} />
+          <StepCreateOrg onComplete={handleOrgCreated} />
         )}
         {step === 1 && (
           <StepCreateProject orgId={orgId} onComplete={handleProjectCreated} />

@@ -17,7 +17,7 @@ import { createOrganization } from "../actions/onboarding-actions";
 import { Building2 } from "lucide-react";
 
 interface Props {
-  onComplete: (orgId: string, orgName: string) => void;
+  onComplete: (orgId: string, orgSlug: string) => void;
 }
 
 export function StepCreateOrg({ onComplete }: Props) {
@@ -29,7 +29,7 @@ export function StepCreateOrg({ onComplete }: Props) {
   async function onSubmit(values: CreateOrgInput) {
     const result = await createOrganization(values);
     if (result.success) {
-      onComplete(result.data.id, result.data.name);
+      onComplete(result.data.id, result.data.slug);
     } else {
       form.setError("name", { message: result.error });
     }
