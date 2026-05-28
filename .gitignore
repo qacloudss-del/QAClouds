@@ -1,0 +1,49 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files — never commit real credentials
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# prisma — migrations ARE committed; only ignore local dev artifacts
+prisma/*.db
+prisma/*.db-journal
+
+# ─── BMAD planning tools & AI agent files ────────────────────────────────────
+# These are local development/planning tools, not part of the app
+.claude/
+_bmad/
+
+# ─── Planning artifacts & internal docs ──────────────────────────────────────
+# PRD, architecture, epics — internal documents, not for the public repo
+_bmad-output/
+claude.md

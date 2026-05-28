@@ -1,0 +1,782 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum PlanTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  QA_MANAGER
+  TESTER
+  DEVELOPER
+  VIEWER
+}
+
+enum MemberStatus {
+  PENDING
+  ACTIVE
+  DECLINED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TestCaseStatus {
+  DRAFT
+  ACTIVE
+  DEPRECATED
+}
+
+enum AutomationStatus {
+  MANUAL
+  AUTOMATED
+  PARTIAL
+}
+
+enum ReleaseStatus {
+  PLANNED
+  IN_PROGRESS
+  RELEASED
+  CANCELLED
+}
+
+enum TestRunStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  ABORTED
+}
+
+enum RunSource {
+  MANUAL
+  CI_GITHUB_ACTIONS
+  API
+}
+
+enum ResultStatus {
+  NOT_RUN
+  PASSED
+  FAILED
+  BLOCKED
+  SKIPPED
+}
+
+enum DefectStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  WONT_FIX
+}
+
+enum ExternalProvider {
+  JIRA
+  GITHUB
+}
+
+enum IntegrationProvider {
+  JIRA
+  GITHUB
+  GITHUB_ACTIONS
+  GITLAB
+  AZURE_DEVOPS
+  JENKINS
+  SLACK
+  PLAYWRIGHT
+  CYPRESS
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  REVOKED
+}
+
+enum ApiKeyPermission {
+  READ_ONLY
+  READ_WRITE
+}
+
+enum NotificationType {
+  TEST_RUN_ASSIGNED
+  TEST_RESULT_COMMENTED
+  DEFECT_ASSIGNED
+  MENTION
+  TEST_RUN_COMPLETED
+  CI_EXECUTION_FAILED
+  RELEASE_STATUS_CHANGED
+  MEMBER_JOINED
+}
+
+enum ActivityAction {
+  CREATED
+  UPDATED
+  DELETED
+  ARCHIVED
+  RESTORED
+  STATUS_CHANGED
+  ASSIGNED
+  COMMENTED
+  RESULT_LOGGED
+  MEMBER_INVITED
+  MEMBER_JOINED
+  MEMBER_REMOVED
+  INTEGRATION_CONNECTED
+  INTEGRATION_DISCONNECTED
+}
+
+enum ResourceType {
+  ORGANIZATION
+  PROJECT
+  TEST_CASE
+  TEST_SUITE
+  TEST_RUN
+  TEST_RESULT
+  DEFECT
+  RELEASE
+  ENVIRONMENT
+  MEMBER
+  INTEGRATION
+  API_KEY
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships        OrganizationMember[]
+  projectMemberships ProjectMember[]
+  ownedTestCases     TestCase[]           @relation("TestCaseOwner")
+  assignedResults    TestResult[]         @relation("ResultAssignee")
+  executedResults    TestResult[]         @relation("ResultExecutor")
+  reportedDefects    Defect[]             @relation("DefectReporter")
+  assignedDefects    Defect[]             @relation("DefectAssignee")
+  comments           Comment[]
+  commentMentions    CommentMention[]
+  activities         Activity[]
+  notifications      Notification[]
+  apiKeys            ApiKey[]
+  auditLogs          AuditLog[]
+
+  @@index([clerkId])
+  @@index([email])
+}
+
+// ─── Organizations ────────────────────────────────────────────────────────────
+
+model Organization {
+  id               String   @id @default(cuid())
+  clerkOrgId       String   @unique
+  name             String
+  slug             String   @unique
+  logoUrl          String?
+  timezone         String   @default("UTC")
+  plan             PlanTier @default(FREE)
+  seatLimit        Int      @default(3)
+  lsCustomerId     String?
+  lsSubscriptionId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  members       OrganizationMember[]
+  projects      Project[]
+  integrations  Integration[]
+  apiKeys       ApiKey[]
+  auditLogs     AuditLog[]
+  activities    Activity[]
+  notifications Notification[]
+
+  @@index([slug])
+  @@index([clerkOrgId])
+}
+
+model OrganizationMember {
+  id              String       @id @default(cuid())
+  organizationId  String
+  userId          String?
+  role            OrgRole      @default(VIEWER)
+  status          MemberStatus @default(PENDING)
+  invitedByUserId String?
+  invitedEmail    String?
+  inviteToken     String?      @unique
+  inviteExpiresAt DateTime?
+  joinedAt        DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([inviteToken])
+}
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+
+model Project {
+  id              String        @id @default(cuid())
+  organizationId  String
+  name            String
+  description     String?
+  color           String        @default("#6366F1")
+  status          ProjectStatus @default(ACTIVE)
+  createdByUserId String
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members             ProjectMember[]
+  testCases           TestCase[]
+  testSuites          TestSuite[]
+  testRuns            TestRun[]
+  releases            Release[]
+  environments        Environment[]
+  defects             Defect[]
+  projectIntegrations ProjectIntegration[]
+  activities          Activity[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  role      OrgRole  @default(TESTER)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+// ─── Environments ─────────────────────────────────────────────────────────────
+
+model Environment {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  color       String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  testRuns TestRun[]
+  defects  Defect[]
+
+  @@index([projectId])
+}
+
+// ─── Releases ─────────────────────────────────────────────────────────────────
+
+model Release {
+  id              String        @id @default(cuid())
+  projectId       String
+  organizationId  String
+  name            String
+  version         String?
+  description     String?
+  targetDate      DateTime?
+  status          ReleaseStatus @default(PLANNED)
+  shareToken      String?       @unique
+  shareEnabled    Boolean       @default(false)
+  createdByUserId String
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  testRuns   TestRun[]
+  defects    Defect[]
+  activities Activity[]
+
+  @@index([projectId])
+  @@index([organizationId])
+  @@index([shareToken])
+}
+
+// ─── Tags ─────────────────────────────────────────────────────────────────────
+
+model Tag {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  color          String?
+  createdAt      DateTime @default(now())
+
+  testCaseTags TestCaseTag[]
+  defectTags   DefectTag[]
+  suiteTags    TestSuiteTag[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+// ─── Test Cases ───────────────────────────────────────────────────────────────
+
+model TestCase {
+  id               String           @id @default(cuid())
+  projectId        String
+  organizationId   String
+  title            String
+  description      String?
+  preconditions    String?
+  priority         Priority         @default(MEDIUM)
+  status           TestCaseStatus   @default(ACTIVE)
+  automationStatus AutomationStatus @default(MANUAL)
+  externalTestId   String?
+  ownerId          String?
+  createdByUserId  String
+  deletedAt        DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner      User?      @relation("TestCaseOwner", fields: [ownerId], references: [id])
+  steps      TestCaseStep[]
+  tags       TestCaseTag[]
+  suiteItems TestSuiteItem[]
+  results    TestResult[]
+  comments   Comment[]
+  activities Activity[]
+
+  @@index([projectId])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([externalTestId])
+}
+
+model TestCaseStep {
+  id             String   @id @default(cuid())
+  testCaseId     String
+  order          Int
+  action         String
+  expectedResult String
+  attachmentUrl  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  testCase TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@index([testCaseId])
+}
+
+model TestCaseTag {
+  testCaseId String
+  tagId      String
+
+  testCase TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([testCaseId, tagId])
+}
+
+// ─── Test Suites ──────────────────────────────────────────────────────────────
+
+model TestSuite {
+  id              String    @id @default(cuid())
+  projectId       String
+  organizationId  String
+  name            String
+  description     String?
+  createdByUserId String
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items    TestSuiteItem[]
+  testRuns TestRun[]
+  tags     TestSuiteTag[]
+
+  @@index([projectId])
+  @@index([organizationId])
+}
+
+model TestSuiteTag {
+  testSuiteId String
+  tagId       String
+
+  testSuite TestSuite @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  tag       Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([testSuiteId, tagId])
+}
+
+model TestSuiteItem {
+  id          String   @id @default(cuid())
+  testSuiteId String
+  testCaseId  String
+  order       Int
+  createdAt   DateTime @default(now())
+
+  testSuite TestSuite @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  testCase  TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@unique([testSuiteId, testCaseId])
+  @@index([testSuiteId])
+}
+
+// ─── Test Runs ────────────────────────────────────────────────────────────────
+
+model TestRun {
+  id              String        @id @default(cuid())
+  projectId       String
+  organizationId  String
+  releaseId       String?
+  environmentId   String
+  testSuiteId     String?
+  name            String
+  description     String?
+  status          TestRunStatus @default(PLANNED)
+  source          RunSource     @default(MANUAL)
+  ciJobId         String?
+  targetEndDate   DateTime?
+  completedAt     DateTime?
+  createdByUserId String
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  release     Release?     @relation(fields: [releaseId], references: [id])
+  environment Environment  @relation(fields: [environmentId], references: [id])
+  testSuite   TestSuite?   @relation(fields: [testSuiteId], references: [id])
+  results     TestResult[]
+  comments    Comment[]
+  activities  Activity[]
+
+  @@index([projectId])
+  @@index([organizationId])
+  @@index([releaseId])
+  @@index([ciJobId])
+  @@index([organizationId, status])
+}
+
+// ─── Test Results ─────────────────────────────────────────────────────────────
+
+model TestResult {
+  id               String       @id @default(cuid())
+  testRunId        String
+  testCaseId       String
+  organizationId   String
+  status           ResultStatus @default(NOT_RUN)
+  comment          String?
+  assignedUserId   String?
+  executedByUserId String?
+  executedAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  testRun      TestRun     @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  testCase     TestCase    @relation(fields: [testCaseId], references: [id])
+  assignedUser User?       @relation("ResultAssignee", fields: [assignedUserId], references: [id])
+  executedBy   User?       @relation("ResultExecutor", fields: [executedByUserId], references: [id])
+  attachments  Attachment[]
+  defects      Defect[]
+
+  @@unique([testRunId, testCaseId])
+  @@index([testRunId])
+  @@index([testCaseId])
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+// ─── Defects ──────────────────────────────────────────────────────────────────
+
+model Defect {
+  id               String            @id @default(cuid())
+  projectId        String
+  organizationId   String
+  title            String
+  description      String?
+  severity         Severity          @default(MEDIUM)
+  priority         Priority          @default(MEDIUM)
+  status           DefectStatus      @default(OPEN)
+  reportedByUserId String
+  assignedUserId   String?
+  testResultId     String?
+  releaseId        String?
+  environmentId    String?
+  externalProvider ExternalProvider?
+  externalId       String?
+  externalUrl      String?
+  externalStatus   String?
+  deletedAt        DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reportedBy   User         @relation("DefectReporter", fields: [reportedByUserId], references: [id])
+  assignedUser User?        @relation("DefectAssignee", fields: [assignedUserId], references: [id])
+  testResult   TestResult?  @relation(fields: [testResultId], references: [id])
+  release      Release?     @relation(fields: [releaseId], references: [id])
+  environment  Environment? @relation(fields: [environmentId], references: [id])
+  attachments  Attachment[]
+  comments     Comment[]
+  activities   Activity[]
+  tags         DefectTag[]
+
+  @@index([projectId])
+  @@index([organizationId])
+  @@index([testResultId])
+  @@index([organizationId, status])
+}
+
+model DefectTag {
+  defectId String
+  tagId    String
+
+  defect Defect @relation(fields: [defectId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([defectId, tagId])
+}
+
+// ─── Attachments ──────────────────────────────────────────────────────────────
+
+model Attachment {
+  id               String   @id @default(cuid())
+  organizationId   String
+  fileName         String
+  fileSize         Int
+  mimeType         String
+  storageKey       String   @unique
+  uploadedByUserId String
+  testResultId     String?
+  defectId         String?
+  commentId        String?
+  createdAt        DateTime @default(now())
+
+  testResult TestResult? @relation(fields: [testResultId], references: [id])
+  defect     Defect?     @relation(fields: [defectId], references: [id])
+  comment    Comment?    @relation(fields: [commentId], references: [id])
+
+  @@index([testResultId])
+  @@index([defectId])
+  @@index([organizationId])
+}
+
+// ─── Comments ─────────────────────────────────────────────────────────────────
+
+model Comment {
+  id             String    @id @default(cuid())
+  organizationId String
+  authorId       String
+  testCaseId     String?
+  testRunId      String?
+  defectId       String?
+  content        String
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  author   User      @relation(fields: [authorId], references: [id])
+  testCase TestCase? @relation(fields: [testCaseId], references: [id])
+  testRun  TestRun?  @relation(fields: [testRunId], references: [id])
+  defect   Defect?   @relation(fields: [defectId], references: [id])
+
+  attachments Attachment[]
+  mentions    CommentMention[]
+
+  @@index([testCaseId])
+  @@index([testRunId])
+  @@index([defectId])
+  @@index([organizationId])
+}
+
+model CommentMention {
+  id        String @id @default(cuid())
+  commentId String
+  userId    String
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([commentId, userId])
+}
+
+// ─── Activities ───────────────────────────────────────────────────────────────
+
+model Activity {
+  id             String         @id @default(cuid())
+  organizationId String
+  projectId      String?
+  actorId        String
+  action         ActivityAction
+  resourceType   ResourceType
+  resourceId     String
+  resourceName   String?
+  metadata       Json?
+  testCaseId     String?
+  testRunId      String?
+  releaseId      String?
+  defectId       String?
+  createdAt      DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id])
+  actor        User         @relation(fields: [actorId], references: [id])
+  testCase     TestCase?    @relation(fields: [testCaseId], references: [id])
+  testRun      TestRun?     @relation(fields: [testRunId], references: [id])
+  release      Release?     @relation(fields: [releaseId], references: [id])
+  defect       Defect?      @relation(fields: [defectId], references: [id])
+
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([actorId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  type           NotificationType
+  title          String
+  body           String?
+  resourceType   ResourceType?
+  resourceId     String?
+  resourceUrl    String?
+  isRead         Boolean          @default(false)
+  emailSentAt    DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([organizationId])
+  @@index([createdAt])
+}
+
+// ─── Integrations ─────────────────────────────────────────────────────────────
+
+model Integration {
+  id              String              @id @default(cuid())
+  organizationId  String
+  provider        IntegrationProvider
+  name            String
+  status          IntegrationStatus   @default(INACTIVE)
+  accessToken     Bytes?
+  refreshToken    Bytes?
+  tokenExpiresAt  DateTime?
+  config          Json?
+  lastSyncAt      DateTime?
+  createdByUserId String
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectIntegrations ProjectIntegration[]
+
+  @@unique([organizationId, provider])
+  @@index([organizationId])
+}
+
+model ProjectIntegration {
+  id            String   @id @default(cuid())
+  projectId     String
+  integrationId String
+  config        Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, integrationId])
+}
+
+// ─── API Keys ─────────────────────────────────────────────────────────────────
+
+model ApiKey {
+  id              String           @id @default(cuid())
+  organizationId  String
+  createdByUserId String
+  name            String
+  keyHash         String           @unique
+  keyPrefix       String
+  permissions     ApiKeyPermission @default(READ_ONLY)
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation(fields: [createdByUserId], references: [id])
+
+  @@index([organizationId])
+}
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorId        String?
+  actorEmail     String
+  action         String
+  resourceType   String
+  resourceId     String
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId])
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([organizationId, createdAt])
+}
