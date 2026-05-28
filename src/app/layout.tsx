@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
+import { shadcn } from "@clerk/ui/themes";
 import { PostHogProvider } from "@/providers/PostHogProvider";
 import "./globals.css";
 
@@ -16,10 +18,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
-        <PostHogProvider>{children}</PostHogProvider>
-      </body>
-    </html>
+    <ClerkProvider
+      appearance={{ theme: shadcn }}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      afterSignInUrl="/onboarding"
+      afterSignUpUrl="/onboarding"
+    >
+      <html lang="en" suppressHydrationWarning>
+        <body className={inter.className}>
+          <PostHogProvider>{children}</PostHogProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

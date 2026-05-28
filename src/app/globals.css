@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import "@clerk/ui/themes/shadcn.css";
 
 @layer base {
   :root {

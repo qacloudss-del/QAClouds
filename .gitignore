@@ -48,3 +48,6 @@ _bmad/
 # PRD, architecture, epics — internal documents, not for the public repo
 _bmad-output/
 claude.md
+
+# clerk configuration (can include secrets)
+/.clerk/
